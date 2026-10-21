@@ -1,5 +1,7 @@
 # Resume Analyzer
 
+[Open the live app](https://resume-analyzer-coral-eight.vercel.app) · [API health](https://resume-analyzer-coral-eight.vercel.app/api/health)
+
 A React and FastAPI application that extracts text from PDF resumes and highlights skills, education, experience, certifications and projects. An optional job description adds keyword matches, missing skills and suggestions.
 
 Analysis uses a fixed skills vocabulary, section detection and heuristic scoring. Scores are guidance, not predictions from a trained model or a guarantee that a commercial applicant tracking system will accept a resume. Scanned PDFs need OCR before upload.
