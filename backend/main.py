@@ -1,193 +1,230 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+"""FastAPI service for extracting useful signals from PDF resumes."""
+from datetime import datetime
+from io import BytesIO
+import re
+from typing import List
+
+import PyPDF2
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
-import PyPDF2
-import io
-import json
-from datetime import datetime
-import re
 
-SKILL_SET = {
-    "python", "java", "c++", "machine learning", "data analysis", "css", "javascript", "node.js",
-    "html", "sql", "git", "github", "react", "angular", "docker", "aws", "azure", "linux",
-    "tensorflow", "keras", "pandas", "numpy", "scikit-learn", "flask", "django", "excel",
-    "power bi", "tableau", "communication", "leadership", "project management"
-    # Add more as needed!
+try:
+    import spacy
+    NLP = spacy.load("en_core_web_sm")
+except Exception:
+    NLP = None
+
+SKILLS = ["python", "java", "c++", "c#", "javascript", "typescript", "react", "next.js", "node.js", "html", "css", "tailwind", "sql", "mongodb", "postgresql", "mysql", "fastapi", "flask", "django", "aws", "azure", "gcp", "docker", "kubernetes", "git", "github", "linux", "figma", "rest api", "graphql", "machine learning", "deep learning", "data analysis", "data visualization", "power bi", "tableau", "pandas", "numpy", "scikit-learn", "tensorflow", "pytorch", "excel", "agile", "project management", "communication", "leadership", "problem solving"]
+ROLE_REQUIREMENTS = {
+    "Frontend Developer": ["react", "javascript", "typescript", "html", "css", "figma", "git"],
+    "Backend Developer": ["python", "node.js", "fastapi", "django", "sql", "rest api", "docker"],
+    "Full Stack Developer": ["react", "javascript", "python", "node.js", "sql", "git", "docker"],
+    "Data Analyst": ["python", "sql", "excel", "power bi", "tableau", "pandas", "data analysis"],
+    "Machine Learning Engineer": ["python", "machine learning", "pandas", "numpy", "scikit-learn", "tensorflow", "pytorch"],
+    "Cloud Engineer": ["aws", "azure", "gcp", "docker", "kubernetes", "linux", "python"],
 }
+PROJECT_HEADINGS = ["projects", "project experience", "personal projects", "academic projects"]
+EDUCATION_HEADINGS = ["education", "academic background"]
+EXPERIENCE_HEADINGS = ["experience", "work experience", "professional experience"]
+CERTIFICATION_HEADINGS = ["certifications", "certificates", "licenses"]
+SECTION_HEADINGS = "|".join(re.escape(name) for name in (
+    EDUCATION_HEADINGS + EXPERIENCE_HEADINGS + PROJECT_HEADINGS + CERTIFICATION_HEADINGS
+    + ["achievements", "skills", "technical skills", "summary"]
+))
+MAX_PDF_BYTES = 4 * 1024 * 1024
 
-app = FastAPI(title="Resume Analyzer API")
-
-# Enable CORS
+app = FastAPI(title="Resume Analyzer API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-    ],
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origin_regex=r"https://[a-zA-Z0-9-]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Simple text processing without SpaCy
+class RoleMatch(BaseModel):
+    title: str
+    match: int
+    matched_skills: List[str]
+    missing_skills: List[str]
+
+class JobDescriptionMatch(BaseModel):
+    target_role: str | None = None
+    score: int
+    matched_skills: List[str]
+    missing_skills: List[str]
+    suggestions: List[str]
+
+class ProjectMatch(BaseModel):
+    title: str
+    skills: List[str]
+    matched_keywords: List[str]
 
 class ResumeAnalysis(BaseModel):
+    candidate_name: str | None = None
     skills: List[str]
     education: List[str]
     experience: List[str]
     certifications: List[str]
-    recommendations: Optional[List[str]] = None
-    score: Optional[int] = None
-    issues: Optional[List[str]] = None
+    recommendations: List[RoleMatch]
+    score: int
+    issues: List[str]
+    summary: str
+    job_match: JobDescriptionMatch | None = None
+    related_projects: List[ProjectMatch] = []
+    projects: List[ProjectMatch] = []
 
-def extract_text_from_pdf(pdf_file: bytes) -> str:
+def extract_pdf_text(contents: bytes) -> str:
     try:
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_file))
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text()
-        return text
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error reading PDF: {str(e)}")
+        reader = PyPDF2.PdfReader(BytesIO(contents))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"We couldn't read that PDF: {exc}") from exc
+    if len(text.strip()) < 20:
+        raise HTTPException(status_code=422, detail="This PDF has no readable text. Try a text-based PDF instead of a scanned image.")
+    return text
 
-def extract_skills(text: str) -> list:
-    found_skills = []
-    text_lower = text.lower()
-    for skill in SKILL_SET:
-        if skill.lower() in text_lower:
-            found_skills.append(skill)
-    return found_skills
+def contains_skill(text: str, skill: str) -> bool:
+    escaped = re.escape(skill).replace(r"\ ", r"\s+")
+    return bool(re.search(rf"(?<![a-z0-9+#]){escaped}(?![a-z0-9+#])", text, re.IGNORECASE))
 
-def extract_section_by_header(text, header, next_headers=None):
-    """
-    Extract lines under a section header until the next header or end of text.
-    More robust: allows for optional whitespace/lines after the header.
-    """
-    if next_headers is None:
-        next_headers = []
-    # Allow for up to 3 lines of whitespace or non-uppercase after the header
-    pattern = rf"{header}\s*\n(?:.*\n){{0,3}}(.*?)(\n(?:{'|'.join(next_headers)})|$)"
-    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
-    if match:
-        section_text = match.group(1).strip()
-        lines = [line.strip() for line in section_text.splitlines() if line.strip()]
-        if lines:
-            return lines
-    return []
+def extract_skills(text: str) -> List[str]:
+    return [skill for skill in SKILLS if contains_skill(text, skill)]
 
-# Helper to filter out contact info lines
-def is_contact_info(line):
-    line_lower = line.lower()
-    # Add more patterns as needed
-    return (
-        '@' in line_lower or
-        'linkedin' in line_lower or
-        re.search(r'\+?\d[\d\- ]{7,}', line_lower) or
-        'ambiti dhanush raj' in line_lower
-    )
+def section_text(text: str, names: List[str]) -> str:
+    name_pattern = "|".join(re.escape(name) for name in names)
+    pattern = rf"(?im)^[ \t]*(?:{name_pattern})[ \t]*:?[ \t]*\r?$([\s\S]*?)(?=^[ \t]*(?:{SECTION_HEADINGS})[ \t]*:?[ \t]*\r?$|\Z)"
+    match = re.search(pattern, text)
+    return match.group(1) if match else ""
 
-def extract_education(text):
-    lines = extract_section_by_header(
-        text,
-        header="EDUCATION",
-        next_headers=["CERTIFICATIONS", "PROJECTS", "KEY SKILLS AND TOOLS", "CAREER OBJECTIVE"]
-    )
-    education = []
-    degree_keywords = ["bachelor", "master", "phd", "b.tech", "m.tech", "b.sc", "m.sc", "intermediate", "grade", "university", "college", "school"]
-    for line in lines:
-        if is_contact_info(line):
-            continue
-        # Only include lines with degree, institution, or year patterns
-        if any(word in line.lower() for word in degree_keywords) or re.search(r"(19|20)\\d{2}", line):
-            education.append(line.strip())
-    return education
+def get_section(text: str, names: List[str]) -> List[str]:
+    lines = [re.sub(r"^[•·▪\-–]\s*", "", line).strip() for line in section_text(text, names).splitlines()]
+    return [line for line in lines if len(line) > 2][:6]
 
-def extract_experience(text):
-    lines = extract_section_by_header(
-        text,
-        header="PROJECTS",
-        next_headers=["EDUCATION", "CERTIFICATIONS", "KEY SKILLS AND TOOLS", "CAREER OBJECTIVE"]
-    )
-    experience = []
-    exp_keywords = ["project", "developed", "implemented", "machine learning", "web app", "description", "kaggle", "intern", "engineer", "developer", "role", "position"]
-    for line in lines:
-        if is_contact_info(line):
-            continue
-        # Only include lines with experience/project keywords or year patterns
-        if any(word in line.lower() for word in exp_keywords) or re.search(r"(19|20)\\d{2}", line):
-            experience.append(line.lstrip('•').strip())
-    return experience
+def candidate_name(text: str) -> str | None:
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{2,50}", first_line) and "resume" not in first_line.lower(): return first_line.title()
+    if NLP:
+        doc = NLP(text[:800])
+        return next((ent.text for ent in doc.ents if ent.label_ == "PERSON"), None)
+    return None
 
-def extract_certifications(text):
-    lines = extract_section_by_header(
-        text,
-        header="CERTIFICATIONS",
-        next_headers=["EDUCATION", "PROJECTS", "KEY SKILLS AND TOOLS", "CAREER OBJECTIVE"]
-    )
-    certifications = []
-    cert_keywords = ["certified", "certification", "certificate", "coursera", "udemy", "infosys", "exam", "award"]
-    for line in lines:
-        if is_contact_info(line):
-            continue
-        # Only include lines with certification/award keywords
-        if any(word in line.lower() for word in cert_keywords):
-            certifications.append(line.lstrip('•').strip())
-    return certifications
+def role_matches(skills: List[str]) -> List[RoleMatch]:
+    skill_set, matches = set(skills), []
+    for title, requirements in ROLE_REQUIREMENTS.items():
+        matched = [skill for skill in requirements if skill in skill_set]
+        missing = [skill for skill in requirements if skill not in skill_set]
+        matches.append(RoleMatch(title=title, match=round(len(matched) / len(requirements) * 100), matched_skills=matched, missing_skills=missing[:3]))
+    return sorted(matches, key=lambda item: item.match, reverse=True)[:3]
 
-def score_resume(skills, education, experience, certifications):
-    score = 0
-    # Skills: up to 80 points (8 points per skill, max 10 skills)
-    score += min(len(skills), 10) * 8
-    # Education: 5 points if present
-    if education:
-        score += 5
-    # Experience: 5 points if present
-    if experience:
-        score += 5
-    # Certifications: 5 points if present
-    if certifications:
-        score += 5
-    # Ensure a minimum score of 60 if there are any skills
-    if score < 60 and skills:
-        score = 60
-    return min(score, 100), []
+def target_role_from_description(description: str) -> str | None:
+    normalized = description.lower()
+    for role in ROLE_REQUIREMENTS:
+        if role.lower() in normalized:
+            return role
+    aliases = {
+        "machine learning": "Machine Learning Engineer",
+        "frontend": "Frontend Developer",
+        "front end": "Frontend Developer",
+        "backend": "Backend Developer",
+        "back end": "Backend Developer",
+        "full stack": "Full Stack Developer",
+        "data analyst": "Data Analyst",
+        "cloud engineer": "Cloud Engineer",
+    }
+    return next((role for phrase, role in aliases.items() if phrase in normalized), None)
 
-def analyze_resume(text: str) -> ResumeAnalysis:
+def match_job_description(skills: List[str], description: str, experience: List[str]) -> JobDescriptionMatch:
+    target_role = target_role_from_description(description)
+    required_skills = extract_skills(description) or ROLE_REQUIREMENTS.get(target_role, [])
+    skill_set = set(skills)
+    matched = [skill for skill in required_skills if skill in skill_set]
+    missing = [skill for skill in required_skills if skill not in skill_set]
+    score = round(len(matched) / len(required_skills) * 100) if required_skills else 0
+    suggestions = []
+    if not required_skills:
+        suggestions.append("We couldn't calculate a keyword match. Add specific skill requirements or a recognizable role title to the job description.")
+        return JobDescriptionMatch(target_role=target_role, score=score, matched_skills=matched, missing_skills=missing, suggestions=suggestions)
+    if missing:
+        suggestions.append(f"Add evidence of {', '.join(missing[:3])} if you have used these skills.")
+    if not experience:
+        suggestions.append("Mirror the job description with achievement-focused project or work-experience bullets.")
+    if score < 70:
+        suggestions.append("Use the job description's exact relevant keywords naturally in your summary and skills section.")
+    if not suggestions:
+        suggestions.append("You have strong keyword alignment—tailor your opening summary to this specific role.")
+    return JobDescriptionMatch(target_role=target_role, score=score, matched_skills=matched, missing_skills=missing, suggestions=suggestions)
+
+def extract_projects(text: str, description: str | None = None, job_match: JobDescriptionMatch | None = None) -> List[ProjectMatch]:
+    project_lines = section_text(text, PROJECT_HEADINGS).splitlines()
+    keywords = []
+    if job_match and description:
+        keywords = extract_skills(description) or ROLE_REQUIREMENTS.get(job_match.target_role, [])
+    projects = []
+    current_title, current_content = None, []
+
+    def save_project():
+        if not current_title:
+            return
+        content = " ".join(current_content)
+        matched = [keyword for keyword in keywords if contains_skill(content, keyword)]
+        projects.append(ProjectMatch(title=current_title, skills=extract_skills(content), matched_keywords=matched))
+
+    for raw_line in project_lines:
+        line = raw_line.strip()
+        # PDF text has no font hierarchy. Accept short, standalone title lines as
+        # well as the common "Project | Technologies" format, excluding bullets,
+        # labels, dates, links, and achievement sentences.
+        is_title = bool(line) and not re.match(r"^[•·▪\-–]", line) and (
+            "|" in line or (
+                len(line) <= 100 and len(line.split()) <= 12
+                and not re.search(r"[.!?:;]$", line)
+                and not re.match(r"(?i)^(?:built|developed|created|implemented|designed|used|using|led|improved|deployed|achieved|increased|reduced|technologies|tech stack|stack|tools|https?://|www\.|\d)", line)
+            )
+        )
+        if is_title:
+            save_project()
+            current_title = line.split("|", 1)[0].strip()
+            current_content = [line]
+        elif current_title and line:
+            current_content.append(line)
+    save_project()
+    return projects[:8]
+
+def analyze(text: str, job_description: str | None = None) -> ResumeAnalysis:
     skills = extract_skills(text)
-    education = extract_education(text)
-    experience = extract_experience(text)
-    certifications = extract_certifications(text)
-    recommendations = []
-    if len(skills) > 0:
-        recommendations.append(f"Based on your skills in {', '.join(skills[:3])}, consider roles in Software Development")
-    score, issues = score_resume(skills, education, experience, certifications)
-    return ResumeAnalysis(
-        skills=skills,
-        education=education,
-        experience=experience,
-        certifications=certifications,
-        recommendations=recommendations,
-        score=score,
-        issues=issues
-    )
+    education = get_section(text, EDUCATION_HEADINGS)
+    experience = get_section(text, EXPERIENCE_HEADINGS) or get_section(text, PROJECT_HEADINGS)
+    certifications = get_section(text, CERTIFICATION_HEADINGS)
+    issues = []
+    if len(skills) < 5: issues.append("Add more role-specific technical skills so recruiters can find you more easily.")
+    if not education: issues.append("Include a clearly labelled education section with your degree and institution.")
+    if not experience: issues.append("Add project or experience bullets that show impact with measurable outcomes.")
+    if not certifications: issues.append("Consider adding relevant certifications, coursework, or credentials.")
+    score = min(100, 35 + min(len(skills), 12) * 4 + (10 if education else 0) + (15 if experience else 0) + (8 if certifications else 0))
+    job_match = match_job_description(skills, job_description, experience) if job_description and job_description.strip() else None
+    projects = extract_projects(text, job_description, job_match)
+    project_matches = [project for project in projects if project.matched_keywords]
+    top = role_matches(skills)
+    if job_match and job_match.target_role:
+        top = [RoleMatch(title=job_match.target_role, match=job_match.score, matched_skills=job_match.matched_skills, missing_skills=job_match.missing_skills[:3])]
+    summary = f"Detected {len(skills)} relevant skills and identified {len(top)} role matches."
+    if job_match:
+        if job_match.matched_skills or job_match.missing_skills:
+            summary += f" Your job-description ATS match is {job_match.score}%."
+        else:
+            summary += " We couldn't calculate a job-description keyword match because no skill requirements or recognizable role were detected."
+    return ResumeAnalysis(candidate_name=candidate_name(text), skills=skills, education=education, experience=experience, certifications=certifications, recommendations=top, score=score, issues=issues, summary=summary, job_match=job_match, related_projects=project_matches, projects=projects)
 
 @app.post("/api/analyze", response_model=ResumeAnalysis)
-async def analyze_resume_endpoint(file: UploadFile = File(...)):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-    
-    contents = await file.read()
-    text = extract_text_from_pdf(contents)
-    analysis = analyze_resume(text)
-    return analysis
+async def analyze_resume(file: UploadFile = File(...), job_description: str | None = Form(None, max_length=20000)):
+    if not (file.filename or "").lower().endswith(".pdf"): raise HTTPException(status_code=400, detail="Please upload a PDF resume.")
+    contents = await file.read(MAX_PDF_BYTES + 1)
+    if len(contents) > MAX_PDF_BYTES: raise HTTPException(status_code=400, detail="Please upload a PDF smaller than 4 MB.")
+    return analyze(extract_pdf_text(contents), job_description)
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-if __name__ == "__main__":
-    import uvicorn
-    import os
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    return {"status": "healthy", "timestamp": datetime.now().isoformat(), "nlp_model_loaded": NLP is not None}

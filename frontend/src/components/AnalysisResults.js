@@ -1,81 +1,9 @@
-import React from 'react';
-import {
-  Box,
-  Paper,
-  Typography,
-  Grid,
-  Chip,
-  CircularProgress,
-  Alert,
-} from '@mui/material';
-import {
-  Star as StarIcon,
-} from '@mui/icons-material';
-
-const AnalysisResults = ({ results, loading, error }) => {
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert severity="error" sx={{ mt: 2 }}>
-        {error}
-      </Alert>
-    );
-  }
-
-  const renderSection = (title, items, icon) => (
-    <Paper sx={{ p: 3, height: '100%' }} elevation={0}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        {icon}
-        <Typography variant="h6" component="h3" sx={{ ml: 1 }}>
-          {title}
-        </Typography>
-      </Box>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-        {items.map((item, index) => (
-          <Chip
-            key={index}
-            label={item}
-            variant="outlined"
-            color="primary"
-          />
-        ))}
-      </Box>
-    </Paper>
-  );
-
-  return (
-    <Box sx={{ mt: 4, fontSize: '1.35rem', textAlign: 'left', width: '100%' }}>
-      <Typography variant="h3" component="h2" gutterBottom sx={{ textAlign: 'center', fontWeight: 700, mb: 4 }}>
-        Resume Analysis Results
-      </Typography>
-      <Grid container spacing={3} justifyContent="center">
-        <Grid item xs={12} md={8}>
-          {renderSection('Skills', results.skills, <StarIcon color="primary" />)}
-        </Grid>
-      </Grid>
-      {results.recommendations && results.recommendations.length > 0 && (
-        <Paper sx={{ p: 3, mt: 4, fontSize: '1.15rem' }} elevation={0}>
-          <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 700, mb: 2 }}>
-            Recommended job
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {results.recommendations.map((recommendation, index) => (
-              <Typography key={index} variant="body1">
-                • {recommendation}
-              </Typography>
-            ))}
-          </Box>
-        </Paper>
-      )}
-    </Box>
-  );
+const ScoreRing = ({ score }) => <div className="score-ring" style={{ '--score': String(score * 3.6) + 'deg' }}><div><strong>{score}</strong><span>/ 100</span></div></div>;
+const PillList = ({ items, empty }) => <div className="pill-list">{items.length ? items.map((item) => <span className="pill" key={item}>{item}</span>) : <span className="muted">{empty}</span>}</div>;
+const JobMatch = ({ match }) => {
+  const hasKeywords = match.matched_skills.length + match.missing_skills.length > 0;
+  return <section className="job-match"><div className="job-match-score"><p className="card-kicker">ATS JOB MATCH</p><strong>{hasKeywords ? match.score + '%' : 'N/A'}</strong><span>{hasKeywords ? 'keyword relevance' : 'No recognized job keywords'}</span></div><div><p className="card-kicker">MATCHED KEYWORDS</p><PillList items={match.matched_skills} empty="No recognized job keywords found." /></div><div><p className="card-kicker">MISSING SKILLS</p><PillList items={match.missing_skills} empty={hasKeywords ? 'All recognized job keywords are present.' : 'Add specific job skills to compare your resume.'} /></div><div className="tailored-advice"><p className="card-kicker">PERSONALIZED SUGGESTIONS</p><ul>{match.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ul></div></section>;
 };
-
-export default AnalysisResults; 
+const RelevantProjects = ({ projects, role }) => <section className="relevant-projects"><p className="eyebrow">RESUME PROJECTS</p><h2>{role ? 'Projects for ' + role : 'Your extracted projects'}</h2>{projects.length ? <div className="project-list">{projects.map((project) => <article key={project.title} style={{ borderLeft: project.matched_keywords.length ? '4px solid #8aa95d' : '4px solid #d9ddd1', background: project.matched_keywords.length ? '#f5fae9' : '#fff', padding: '14px 16px', marginTop: '10px' }}>{project.matched_keywords.length > 0 && <strong style={{ color: '#56713e', fontSize: '11px', letterSpacing: '1px' }}>RECOMMENDED FOR THIS JOB</strong>}<h3 style={{ margin: '6px 0 0' }}>{project.title}</h3><PillList items={project.skills} empty="No skills detected" /></article>)}</div> : <p className="muted">No projects could be extracted. Use clear project titles and selectable text in your PDF.</p>}</section>;
+const AnalysisResults = ({ results, onReset }) => <section className="results-page"><header className="results-header"><div><p className="eyebrow">ANALYSIS COMPLETE</p><h1>{results.candidate_name ? results.candidate_name.split(' ')[0] + '’s career snapshot' : 'Your career snapshot'}</h1><p>{results.summary}</p></div><button className="outline-button" onClick={onReset}>UPLOAD NEW RESUME</button></header>{results.job_match && <JobMatch match={results.job_match} />}<RelevantProjects projects={results.projects || []} role={results.job_match?.target_role} /><div className="overview-grid"><article className="score-card"><p className="card-kicker">RESUME HEALTH</p><ScoreRing score={results.score} /><p className="score-caption">{results.score >= 75 ? 'A strong foundation. Keep refining the details.' : 'A few targeted changes can raise your impact.'}</p></article><article className="advice-card"><p className="card-kicker">NEXT BEST MOVES</p><h2>Make your profile sharper</h2><ol>{results.issues.length ? results.issues.map((issue) => <li key={issue}>{issue}</li>) : <li>Great coverage—tailor your bullets for each role you apply to.</li>}</ol></article></div><div className="section-heading"><p className="eyebrow">ROLE COMPATIBILITY</p><h2>Where your skills can take you</h2></div><div className="role-grid">{results.recommendations.map((role, index) => <article className="role-card" key={role.title}><span className="role-number">0{index + 1}</span><div className="match"><strong>{role.match}%</strong><span>match</span></div><h3>{role.title}</h3><div className="meter"><i style={{ width: String(role.match) + '%' }} /></div><p>Strong match: {role.matched_skills.length ? role.matched_skills.join(', ') : 'transferable foundations'}</p>{role.missing_skills.length > 0 && <small>Explore: {role.missing_skills.join(', ')}</small>}</article>)}</div><div className="details-grid"><article><p className="card-kicker">SKILLS DETECTED</p><h2>{results.skills.length} relevant skills</h2><PillList items={results.skills} empty="No known skills were detected. Try a text-based PDF." /></article><article><p className="card-kicker">EXPERIENCE & EDUCATION</p><div className="detail-row"><b>Experience</b><PillList items={results.experience} empty="Not clearly detected" /></div><div className="detail-row"><b>Education</b><PillList items={results.education} empty="Not clearly detected" /></div></article></div></section>;
+export default AnalysisResults;

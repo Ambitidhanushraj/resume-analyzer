@@ -1,0 +1,14 @@
+{
+  "name": "resume-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "npm --prefix frontend start",
+    "build": "npm --prefix frontend run build",
+    "test:frontend": "npm --prefix frontend test -- --watchAll=false --runInBand",
+    "test:backend": "python3 -m unittest discover -s backend/tests -v"
+  }
+}

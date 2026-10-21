@@ -1,145 +1,43 @@
-# Deployment Guide
+# Deploy to Vercel
 
-This guide will help you deploy the Resume Analyzer project to Vercel (frontend) and Render (backend).
+Deploy the frontend and Python API together from [Ambitidhanushraj/resume-analyzer](https://github.com/Ambitidhanushraj/resume-analyzer). The root `vercel.json` uses [Vercel Services](https://vercel.com/docs/services), currently available in beta, to build both parts independently on one domain.
 
-## Prerequisites
+## Connect GitHub
 
-- GitHub account
-- Vercel account (free tier available)
-- Render account (free tier available)
-- Git installed on your local machine
+1. In Vercel, add a project and import `Ambitidhanushraj/resume-analyzer`. Authorize Vercel to access the repository when prompted.
+2. Keep **Root Directory at the repository root**. The committed configuration selects Create React App in `frontend/` and FastAPI in `backend/` with entrypoint `main:app`. Leave project-wide build and output overrides unset.
+3. Use `main` as the production branch and deploy. Subsequent pushes to `main` automatically create production deployments; other branches can create previews through the Git integration.
+4. Confirm the project’s Git settings show the correct repository and production branch. A local CLI deployment alone does not establish Git integration.
 
-## Backend Deployment (Render)
+The frontend uses Node.js 22 and builds to `frontend/build`. The backend uses Python 3.12 from `backend/.python-version` and installs the lean, pinned `backend/requirements.txt`. No spaCy model download is required.
 
-### Step 1: Prepare Backend for Deployment
+## Routing and environment
 
-1. **Update CORS Settings** (Already done)
-   - The backend has been configured to allow requests from Vercel and Render domains
+Top-level rewrites send `/api/*` to FastAPI and every other path to the frontend. Services preserve the request path, so the backend receives `/api/analyze` unchanged. See [service routing](https://vercel.com/docs/services/routing).
 
-2. **Environment Variables**
-   - The backend will automatically use the `PORT` environment variable provided by Render
+No production environment variables are required. Leave `REACT_APP_API_URL` unset so browser requests use the deployment’s own origin. Remove any stale value pointing to a former backend host, then redeploy: Create React App reads environment variables at build time.
 
-### Step 2: Deploy to Render
+Locally, the frontend defaults to `http://localhost:8000`. The API allows local browser origins `http://localhost:3000` and `http://localhost:3001`; deployed traffic uses the same origin and does not require cross-origin access.
 
-1. **Sign up/Login to Render**
-   - Go to [render.com](https://render.com)
-   - Sign up or login with your GitHub account
+## Verify the deployed application
 
-2. **Create New Web Service**
-   - Click "New +" → "Web Service"
-   - Connect your GitHub repository
-   - Select the repository containing this project
+Replace the example URL with the deployment URL returned by Vercel:
 
-3. **Configure the Service**
-   - **Name**: `resume-analyzer-backend` (or any name you prefer)
-   - **Root Directory**: `backend` (important!)
-   - **Environment**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt && python -m spacy download en_core_web_sm`
-   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-
-4. **Deploy**
-   - Click "Create Web Service"
-   - Render will automatically build and deploy your backend
-   - Wait for the deployment to complete (usually 5-10 minutes)
-
-5. **Get Your Backend URL**
-   - Once deployed, you'll get a URL like: `https://your-app-name.onrender.com`
-   - Save this URL for the frontend configuration
-
-## Frontend Deployment (Vercel)
-
-### Step 1: Prepare Frontend for Deployment
-
-1. **Update API URL** (Already done)
-   - The frontend has been configured to use environment variables for the API URL
-
-2. **Environment Variables**
-   - You'll need to set the `REACT_APP_API_URL` environment variable in Vercel
-
-### Step 2: Deploy to Vercel
-
-1. **Sign up/Login to Vercel**
-   - Go to [vercel.com](https://vercel.com)
-   - Sign up or login with your GitHub account
-
-2. **Import Project**
-   - Click "New Project"
-   - Import your GitHub repository
-   - Select the repository containing this project
-
-3. **Configure the Project**
-   - **Framework Preset**: `Create React App`
-   - **Root Directory**: `frontend` (important!)
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `build`
-
-4. **Set Environment Variables**
-   - In the project settings, go to "Environment Variables"
-   - Add a new variable:
-     - **Name**: `REACT_APP_API_URL`
-     - **Value**: `https://your-backend-app-name.onrender.com` (use your actual backend URL)
-   - Save the environment variable
-
-5. **Deploy**
-   - Click "Deploy"
-   - Vercel will automatically build and deploy your frontend
-   - Wait for the deployment to complete (usually 2-5 minutes)
-
-6. **Get Your Frontend URL**
-   - Once deployed, you'll get a URL like: `https://your-app-name.vercel.app`
-   - This is your live application!
-
-## Testing the Deployment
-
-1. **Test Backend Health**
-   - Visit: `https://your-backend-app-name.onrender.com/api/health`
-   - You should see: `{"status": "healthy", "timestamp": "..."}`
-
-2. **Test Frontend**
-   - Visit your Vercel URL
-   - Try uploading a PDF resume
-   - The analysis should work with your deployed backend
-
-## Troubleshooting
-
-### Common Issues
-
-1. **CORS Errors**
-   - Make sure your backend CORS settings include your Vercel domain
-   - Check that the frontend is using the correct backend URL
-
-2. **Build Failures**
-   - Check that all dependencies are in `requirements.txt` (backend) and `package.json` (frontend)
-   - Ensure the SpaCy model is being downloaded during build
-
-3. **API Connection Issues**
-   - Verify the `REACT_APP_API_URL` environment variable is set correctly in Vercel
-   - Check that your backend is running and accessible
-
-4. **Render Free Tier Limitations**
-   - Free tier services may sleep after inactivity
-   - First request after inactivity may take 30-60 seconds to wake up
-
-### Environment Variables Reference
-
-**Backend (Render)**
-- `PORT`: Automatically set by Render
-
-**Frontend (Vercel)**
-- `REACT_APP_API_URL`: Your backend URL (e.g., `https://your-app-name.onrender.com`)
-
-## Local Development
-
-For local development, create a `.env` file in the frontend directory:
-
-```
-REACT_APP_API_URL=http://localhost:8000
+```bash
+curl --fail https://YOUR-PROJECT.vercel.app/api/health
+curl --fail -F 'file=@/absolute/path/resume.pdf' -F 'job_description=Frontend developer using React and JavaScript' https://YOUR-PROJECT.vercel.app/api/analyze
 ```
 
-## Support
+Expect a healthy JSON response from the first request and analysis JSON from the second. A false `nlp_model_loaded` value is expected without the optional spaCy model; core analysis uses deterministic text extraction and heuristics.
 
-If you encounter issues:
-1. Check the deployment logs in both Vercel and Render dashboards
-2. Verify all environment variables are set correctly
-3. Test the backend health endpoint
-4. Check browser console for any frontend errors 
+In a browser, confirm the page and static assets load, then upload a text-based PDF with and without a job description. Check skills, extracted sections, scores and suggestions; use **Analyze another** to repeat. Also verify malformed, scanned or oversized PDFs show useful errors. Do not treat a successful frontend build as proof that the API works.
+
+## Limits and troubleshooting
+
+- Upload limit: 4 MiB per PDF; job descriptions: 20,000 characters. This leaves room for multipart data under Vercel’s [4.5 MB request body limit](https://vercel.com/docs/functions/limitations).
+- If `/api/health` returns HTML, check the root directory and root `vercel.json`; the request must reach the backend service.
+- If the UI calls another host, remove the old `REACT_APP_API_URL` value and redeploy.
+- If a build fails, inspect the failing service’s build logs. Verify the frontend lockfile is committed and Python dependencies match `backend/requirements.txt`.
+- If deployment protection shows a login page, test through an authenticated session or the production domain according to the project’s access settings.
+
+This application has no persistent resume store and needs no database. Its scores indicate keyword and section coverage; they are not a trained model’s assessment or an ATS acceptance guarantee.

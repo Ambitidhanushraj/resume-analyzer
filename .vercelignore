@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/venv
+**/.venv
+**/__pycache__
+frontend/build
+frontend/src/components/* 2.js
+frontend/src/* 2.css
+.env
+.env.*
+!**/.env.example

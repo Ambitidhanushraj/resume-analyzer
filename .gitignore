@@ -7,9 +7,14 @@ __pycache__/
 # === Virtual Environments ===
 venv/
 venv311/
+.venv/
 
 # === Environment Secrets ===
 .env
+.env.*
+!.env.example
+.vercel/
+.pytest_cache/
 
 # === OS-generated files ===
 .DS_Store
@@ -23,8 +28,14 @@ Thumbs.db
 
 # === Node.js - Frontend (if applicable) ===
 frontend/node_modules/
+node_modules/
 frontend/build/
 frontend/dist/
+coverage/
+
+# Local editor copies; keep these out of the application and deployment
+frontend/src/components/* 2.js
+frontend/src/* 2.css
 
 # === Python egg files ===
 *.egg-info/

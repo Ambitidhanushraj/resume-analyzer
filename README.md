@@ -1,98 +1,47 @@
 # Resume Analyzer
 
-A powerful web application for analyzing resumes using NLP and machine learning techniques.
+A React and FastAPI application that extracts text from PDF resumes and highlights skills, education, experience, certifications and projects. An optional job description adds keyword matches, missing skills and suggestions.
 
-## Features
+Analysis uses a fixed skills vocabulary, section detection and heuristic scoring. Scores are guidance, not predictions from a trained model or a guarantee that a commercial applicant tracking system will accept a resume. Scanned PDFs need OCR before upload.
 
-- Resume PDF parsing and text extraction
-- NLP-based information extraction (Skills, Education, Experience, Certifications)
-- Job role recommendations
-- Recruiter dashboard with analytics
-- Modern React.js frontend
-- FastAPI backend
+## Run locally
 
-## Project Structure
+Use Node.js 22, npm and Python 3.12. From the repository root:
 
-```
-resume-analyzer/
-├── frontend/           # React.js frontend application
-├── backend/           # FastAPI backend application
-└── README.md
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r backend/requirements-dev.txt
+npm --prefix frontend ci
+python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-## Setup Instructions
+Keep that terminal running. In another terminal at the repository root:
 
-### Backend Setup
+```bash
+PORT=3001 npm start
+```
 
-1. Navigate to the backend directory:
+Open [the app](http://localhost:3001). See [RUN_PROJECT.md](RUN_PROJECT.md) for Windows instructions and troubleshooting.
 
-   ```bash
-   cd backend
-   ```
+## Verify
 
-2. Create a virtual environment:
+With the virtual environment activated:
 
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+```bash
+npm run test:backend
+npm run test:frontend
+npm run build
+```
 
-3. Install dependencies:
+Upload a text-based PDF up to 4 MiB. A job description can contain up to 20,000 characters. Verify results with and without a description, then try another resume. Uploaded documents are processed in memory; the app does not persist them.
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+## API
 
-4. Start the FastAPI server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+- `POST /api/analyze`: multipart form with `file` and optional `job_description`; returns extracted sections, heuristic scores, role matches and suggestions.
+- `GET /api/health`: service health and optional NLP model status.
+- [Local API documentation](http://localhost:8000/docs).
 
-### Frontend Setup
+## Deploy
 
-1. Navigate to the frontend directory:
-
-   ```bash
-   cd frontend
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-3. Start the development server:
-   ```bash
-   npm start
-   ```
-
-## API Endpoints
-
-- `POST /api/analyze`: Upload and analyze a resume
-- `GET /api/recommendations`: Get job role recommendations
-- `GET /api/analytics`: Get recruiter analytics
-
-## Technologies Used
-
-- Frontend: React.js, Axios, Chart.js
-- Backend: FastAPI, PyPDF2, SpaCy
-- NLP: SpaCy for NER and information extraction
-
-backend:
-
-cd backend
-
-venv\Scripts\activate
-
-pip install -r requirements.txt
-
-python main.py
-
-frontend:
-
-cd frontend
-
-npm install
-
-npm start
+The [GitHub repository](https://github.com/Ambitidhanushraj/resume-analyzer) contains a root `vercel.json` that deploys both services to one Vercel project. Production requests use the same origin; no API key or separate backend host is required. See [DEPLOYMENT.md](DEPLOYMENT.md) for Git integration, routing and deployment verification.
