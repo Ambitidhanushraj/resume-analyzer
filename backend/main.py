@@ -210,7 +210,8 @@ def analyze(text: str, job_description: str | None = None) -> ResumeAnalysis:
     top = role_matches(skills)
     if job_match and job_match.target_role:
         top = [RoleMatch(title=job_match.target_role, match=job_match.score, matched_skills=job_match.matched_skills, missing_skills=job_match.missing_skills[:3])]
-    summary = f"Detected {len(skills)} relevant skills and identified {len(top)} role matches."
+    role_label = "role match" if len(top) == 1 else "role matches"
+    summary = f"Detected {len(skills)} relevant skills and identified {len(top)} {role_label}."
     if job_match:
         if job_match.matched_skills or job_match.missing_skills:
             summary += f" Your job-description ATS match is {job_match.score}%."
