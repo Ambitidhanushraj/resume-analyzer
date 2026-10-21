@@ -28,6 +28,8 @@ Open [the app](http://localhost:3001). See [RUN_PROJECT.md](RUN_PROJECT.md) for 
 
 ## Verify
 
+Regression tests cover PDF parsing, job-description matching, project extraction, upload validation, API errors and the result/reset UI. The production upload flow has also been checked with and without a job description and after a malformed PDF error.
+
 With the virtual environment activated:
 
 ```bash
