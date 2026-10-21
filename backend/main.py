@@ -1,5 +1,5 @@
 """FastAPI service for extracting useful signals from PDF resumes."""
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 import re
 from typing import List
@@ -228,4 +228,4 @@ async def analyze_resume(file: UploadFile = File(...), job_description: str | No
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat(), "nlp_model_loaded": NLP is not None}
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat(), "nlp_model_loaded": NLP is not None}
