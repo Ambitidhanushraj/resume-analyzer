@@ -2,7 +2,7 @@ import React, { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import axios from 'axios';
-import ResumeUpload, { getAnalysisUrl } from './ResumeUpload';
+import ResumeUpload, { getAnalysisUrl, getRolesUrl } from './ResumeUpload';
 
 jest.mock('axios');
 
@@ -11,6 +11,12 @@ const originalNodeEnv = process.env.NODE_ENV;
 let container;
 let root;
 let complete;
+const catalog = { roles: [
+  { title: 'Security Analyst', domain: 'Cybersecurity', profile_examples: 2 },
+  { title: 'SOC Analyst', domain: 'Cybersecurity', profile_examples: 1 },
+  { title: 'Data Analyst', domain: 'Data & Analytics', profile_examples: 1 },
+  { title: 'UI/UX Designer', domain: 'Design', profile_examples: 0 },
+] };
 
 function UploadHarness() {
   const [loading, setLoading] = useState(false);
@@ -24,15 +30,16 @@ async function upload(files) {
   await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   delete process.env.REACT_APP_API_URL;
   jest.clearAllMocks();
+  axios.get.mockResolvedValue({ data: catalog });
   complete = jest.fn();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root.render(<UploadHarness />));
+  await act(async () => root.render(<UploadHarness />));
 });
 
 afterEach(() => {
@@ -46,10 +53,12 @@ afterEach(() => {
 test('uses the production origin and normalizes a configured API URL', () => {
   process.env.NODE_ENV = 'production';
   expect(getAnalysisUrl()).toBe('/api/analyze');
+  expect(getRolesUrl()).toBe('/api/roles');
   process.env.NODE_ENV = 'development';
   expect(getAnalysisUrl()).toBe('http://localhost:8000/api/analyze');
   process.env.REACT_APP_API_URL = ' https://api.example.com/// ';
   expect(getAnalysisUrl()).toBe('https://api.example.com/api/analyze');
+  expect(getRolesUrl()).toBe('https://api.example.com/api/roles');
 });
 
 test('uploads a PDF and target job description, then delivers the response', async () => {
@@ -62,6 +71,7 @@ test('uploads a PDF and target job description, then delivers the response', asy
   expect(url).toBe('http://localhost:8000/api/analyze');
   expect(data.get('file')).toBe(file);
   expect(data.get('job_description')).toBe('React developer');
+  expect(data.has('target_role')).toBe(false);
   expect(complete).toHaveBeenCalledWith(result);
   expect(container.querySelector('button').disabled).toBe(false);
 });
@@ -97,6 +107,48 @@ test('keeps the controls disabled until the current upload completes', async () 
   await upload([new File(['resume'], 'resume.pdf', { type: 'application/pdf' })]);
   expect(container.querySelector('button').disabled).toBe(true);
   expect(container.querySelector('textarea').disabled).toBe(true);
+  expect(container.querySelector('select').disabled).toBe(true);
   await act(async () => resolveUpload({ data: { score: 50 } }));
   expect(container.querySelector('button').disabled).toBe(false);
+});
+
+
+test('loads accessible role choices grouped by domain and sends the selected role', async () => {
+  const select = container.querySelector('#target-role');
+  expect(axios.get).toHaveBeenCalledWith('http://localhost:8000/api/roles');
+  expect(container.querySelector('label[for="target-role"]').textContent).toContain('TARGET ROLE');
+  expect([...select.querySelectorAll('optgroup')].map((group) => group.label)).toEqual(['Cybersecurity', 'Data & Analytics', 'Design']);
+  expect(select.value).toBe('');
+  act(() => Simulate.change(select, { target: { value: 'UI/UX Designer' } }));
+  axios.post.mockResolvedValue({ data: { score: 80 } });
+  await upload([new File(['resume'], 'designer.pdf', { type: 'application/pdf' })]);
+  expect(axios.post.mock.calls[0][1].get('target_role')).toBe('UI/UX Designer');
+});
+
+test('keeps automatic analysis available when the role catalog fails', async () => {
+  axios.get.mockRejectedValue(new Error('Offline'));
+  await act(async () => root.render(<UploadHarness key="catalog-failure" />));
+  expect(container.querySelector('select').disabled).toBe(true);
+  expect(container.querySelector('[role="status"]').textContent).toContain('Automatic matching is still available.');
+  axios.post.mockResolvedValue({ data: { score: 60 } });
+  await upload([new File(['resume'], 'resume.pdf', { type: 'application/pdf' })]);
+  expect(axios.post.mock.calls[0][1].has('target_role')).toBe(false);
+  expect(complete).toHaveBeenCalledWith({ score: 60 });
+});
+
+test('allows upload while role choices are still loading', async () => {
+  axios.get.mockImplementation(() => new Promise(() => {}));
+  await act(async () => root.render(<UploadHarness key="catalog-loading" />));
+  expect(container.querySelector('select').disabled).toBe(true);
+  expect(container.querySelector('button').disabled).toBe(false);
+  expect(container.querySelector('[role="status"]').textContent).toContain('You can still upload');
+});
+
+test.each(['application/octet-stream', ''])('submits a PDF with generic or empty browser MIME for server verification', async (type) => {
+  axios.post.mockResolvedValue({ data: { score: 60 } });
+  const file = new File(['pdf content'], 'resume.pdf', { type });
+  await upload([file]);
+  expect(axios.post).toHaveBeenCalledTimes(1);
+  expect(axios.post.mock.calls[0][1].get('file')).toBe(file);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
 });

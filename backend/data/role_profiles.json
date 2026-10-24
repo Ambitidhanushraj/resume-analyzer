@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "method": "Deduplicated, labeled canonical-skill frequency profiles with curated role requirements",
+  "source_count": 12,
+  "unique_count": 11,
+  "duplicate_count": 1,
+  "limitations": [
+    "Small sample of tailored resume variants from one candidate; examples are not independent career histories.",
+    "No held-out evaluation or broad model generalization is claimed.",
+    "Keyword coverage and learned ranking are guidance, not hiring probabilities or verified experience.",
+    "Roles without labeled examples use curated requirements only."
+  ],
+  "roles": {
+    "Full Stack Developer": {
+      "example_count": 1,
+      "skill_counts": {
+        "react": 1,
+        "javascript": 1,
+        "python": 1,
+        "git": 1
+      }
+    },
+    "Data Analyst": {
+      "example_count": 1,
+      "skill_counts": {
+        "python": 1,
+        "sql": 1,
+        "power bi": 1,
+        "tableau": 1,
+        "pandas": 1,
+        "data analysis": 1
+      }
+    },
+    "Software Engineer": {
+      "example_count": 2,
+      "skill_counts": {
+        "python": 2,
+        "java": 2,
+        "data structures": 2,
+        "algorithms": 2,
+        "git": 2,
+        "rest api": 2
+      }
+    },
+    "C++ / Embedded Developer": {
+      "example_count": 1,
+      "skill_counts": {
+        "c++": 1,
+        "stl": 1,
+        "object-oriented programming": 1,
+        "data structures": 1,
+        "multithreading": 1,
+        "memory management": 1,
+        "linux": 1,
+        "rtos": 1
+      }
+    },
+    "Content Analyst": {
+      "example_count": 2,
+      "skill_counts": {
+        "content analysis": 2,
+        "screenshot curation": 2,
+        "user flows": 2,
+        "ui pattern tagging": 2,
+        "figma": 2,
+        "data validation": 2,
+        "quality assurance": 2
+      }
+    },
+    "Business Intelligence Developer": {
+      "example_count": 1,
+      "skill_counts": {
+        "sql": 1,
+        "power bi": 1,
+        "tableau": 1,
+        "kpi": 1,
+        "business intelligence": 1
+      }
+    },
+    "Observability Engineer": {
+      "example_count": 1,
+      "skill_counts": {
+        "elasticsearch": 1,
+        "kibana": 1,
+        "elk stack": 1,
+        "log analysis": 1,
+        "monitoring": 1,
+        "alerting": 1
+      }
+    },
+    "Automation Engineer": {
+      "example_count": 2,
+      "skill_counts": {
+        "python": 2,
+        "automation": 2,
+        "data validation": 2,
+        "json": 2,
+        "streamlit": 2
+      }
+    },
+    "AI Engineer": {
+      "example_count": 2,
+      "skill_counts": {
+        "python": 2,
+        "nlp": 2,
+        "rag": 2,
+        "generative ai": 2,
+        "fastapi": 2,
+        "prompt engineering": 2
+      }
+    },
+    "Security Analyst": {
+      "example_count": 1,
+      "skill_counts": {
+        "cybersecurity": 1,
+        "iam": 1,
+        "networking": 1,
+        "log analysis": 1
+      }
+    }
+  }
+}

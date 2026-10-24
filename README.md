@@ -2,9 +2,9 @@
 
 [Open the live app](https://resume-analyzer-coral-eight.vercel.app) · [API health](https://resume-analyzer-coral-eight.vercel.app/api/health)
 
-A React and FastAPI application that extracts text from PDF resumes and highlights skills, education, experience, certifications and projects. An optional job description adds keyword matches, missing skills and suggestions.
+A React and FastAPI application that extracts text from PDF resumes and highlights skills, education, experience, certifications and projects. Choose a target role or use automatic matching across software, embedded systems, design, content analysis, data/BI, AI, automation, monitoring, cloud, quality and security. An optional job description adds an independent keyword comparison.
 
-Analysis uses a fixed skills vocabulary, section detection and heuristic scoring. Scores are guidance, not predictions from a trained model or a guarantee that a commercial applicant tracking system will accept a resume. Scanned PDFs need OCR before upload.
+Role ranking combines curated requirements with locally learned, deduplicated skill-frequency profiles. Displayed percentages measure skill coverage, not hiring probability or an ATS guarantee. Extracted resume projects remain separate from suggested future learning projects. Scanned PDFs need OCR before upload. See [MODEL_CARD.md](MODEL_CARD.md) for training, provenance and limits.
 
 ## Run locally
 
@@ -28,7 +28,7 @@ Open [the app](http://localhost:3001). See [RUN_PROJECT.md](RUN_PROJECT.md) for 
 
 ## Verify
 
-Regression tests cover PDF parsing, job-description matching, project extraction, upload validation, API errors and the result/reset UI. The production upload flow has also been checked with and without a job description and after a malformed PDF error.
+Regression tests cover domain matching, profile training, PDF formats, job-description matching, project extraction, upload validation, API errors and the role-selection/result/reset UI.
 
 With the virtual environment activated:
 
@@ -38,11 +38,12 @@ npm run test:frontend
 npm run build
 ```
 
-Upload a text-based PDF up to 4 MiB. A job description can contain up to 20,000 characters. Verify results with and without a description, then try another resume. Uploaded documents are processed in memory; the app does not persist them.
+Upload a text-based PDF up to 4 MiB. A job description can contain up to 20,000 characters. Verify results with automatic matching, a selected role and a description, then try another resume. Uploaded documents are processed in memory; the app does not persist them or silently add them to training data.
 
 ## API
 
-- `POST /api/analyze`: multipart form with `file` and optional `job_description`; returns extracted sections, heuristic scores, role matches and suggestions.
+- `POST /api/analyze`: multipart form with `file`, optional `job_description` and optional `target_role`; returns extracted sections, coverage scores, role matches, supporting projects and future project ideas.
+- `GET /api/roles`: available roles grouped by domain, reference counts and training metadata.
 - `GET /api/health`: service health and optional NLP model status.
 - [Local API documentation](http://localhost:8000/docs).
 

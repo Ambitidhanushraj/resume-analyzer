@@ -9,3 +9,7 @@ frontend/src/* 2.css
 .env
 .env.*
 !**/.env.example
+.local
+private-resumes
+training-reports
+backend/tests

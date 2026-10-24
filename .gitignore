@@ -15,6 +15,9 @@ venv311/
 !.env.example
 .vercel/
 .pytest_cache/
+.local/
+private-resumes/
+training-reports/
 
 # === OS-generated files ===
 .DS_Store

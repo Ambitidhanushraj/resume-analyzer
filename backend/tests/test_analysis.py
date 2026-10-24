@@ -41,7 +41,10 @@ class AnalysisRegressionTests(unittest.TestCase):
         result = analyze("Jane Doe\nSkills\nReact JavaScript\n", "Frontend Developer using React and JavaScript")
         self.assertEqual(result.job_match.score, 100)
         self.assertEqual(result.job_match.missing_skills, [])
-        self.assertEqual(result.recommendations[0].missing_skills, [])
+        # The supplied job asks for two skills; generic role coverage remains a
+        # separate, broader comparison and must not imply full role coverage.
+        self.assertEqual(result.recommendations[0].match, 29)
+        self.assertIn("typescript", result.recommendations[0].missing_skills)
 
     def test_generic_role_uses_fallback_requirements(self):
         result = analyze("Jane Doe\nSkills\nReact JavaScript\n", "Frontend Developer")
@@ -60,7 +63,7 @@ class AnalysisRegressionTests(unittest.TestCase):
     def test_missing_required_skills_still_reports_zero_match(self):
         result = analyze("Jane Doe\nSkills\nPython", "React and JavaScript")
         self.assertEqual(result.job_match.score, 0)
-        self.assertIn("ATS match is 0%", result.summary)
+        self.assertIn("keyword coverage is 0%", result.summary)
 
     def test_actual_experience_is_preferred_to_earlier_projects(self):
         result = analyze("Jane Doe\nProjects\nPortfolio Website\n- Built using React\nExperience\nSoftware Intern\n- Developed Python APIs")
